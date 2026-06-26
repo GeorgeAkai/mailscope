@@ -20,10 +20,12 @@ export default async function OnboardPage() {
   }
 
   return (
-    <div className="flex flex-1 flex-col">
+    <div className="bg-grid flex flex-1 flex-col">
       <Header email={session.user.email} />
-      <main className="mx-auto flex w-full max-w-6xl flex-1 items-center px-4 py-12">
-        <OnboardForm />
+      <main className="mx-auto flex w-full max-w-6xl flex-1 items-center px-4 py-12 sm:px-6">
+        <div className="glass glow-blue-lg w-full rounded-2xl p-8 sm:p-10">
+          <OnboardForm />
+        </div>
       </main>
     </div>
   );

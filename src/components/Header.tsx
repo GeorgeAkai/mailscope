@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { signOut } from "@/auth";
 import { Logo } from "@/components/Logo";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { cn } from "@/lib/cn";
 
 export function Header({
@@ -27,8 +28,9 @@ export function Header({
             Tasks
           </NavLink>
           <NavLink href="/settings" active={activePath === "settings"}>
-            Categories
+            Settings
           </NavLink>
+          <ThemeToggle />
           <form
             action={async () => {
               "use server";

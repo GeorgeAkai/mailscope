@@ -45,8 +45,8 @@ export function Logo({
         <div className="absolute inset-0 rounded-lg bg-blue-400/20 opacity-0 blur-md transition group-hover:opacity-100" />
       </div>
       {showText && (
-        <span className={cn(textSize, "font-semibold tracking-tight text-slate-100")}>
-          Email<span className="text-blue-400">Visibility</span>
+        <span className={cn(textSize, "font-semibold tracking-tight")} style={{ color: "var(--text-primary)" }}>
+          Mail<span className="text-blue-400">Scope</span>
         </span>
       )}
     </Link>

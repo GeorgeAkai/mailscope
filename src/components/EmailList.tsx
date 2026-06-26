@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { cn } from "@/lib/cn";
+import { categoryColors } from "@/lib/defaults";
+import { EmailDetailModal, type EmailDetail } from "@/components/EmailDetailModal";
 
 type Category = {
   id: string;
@@ -11,30 +13,45 @@ type Category = {
 
 type Email = {
   id: string;
+  gmailId: string;
   subject: string | null;
   fromAddress: string;
   fromName: string | null;
   snippet: string | null;
+  bodyPreview: string | null;
   receivedAt: string;
   importanceScore: number;
   userOverride: boolean;
+  readAt: string | null;
   category: Category | null;
 };
+
+const TIME_FILTERS = [
+  { label: "All", days: "0" },
+  { label: "Today", days: "1" },
+  { label: "7 days", days: "7" },
+  { label: "30 days", days: "30" },
+  { label: "90 days", days: "90" },
+] as const;
 
 export function EmailList() {
   const [emails, setEmails] = useState<Email[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [filter, setFilter] = useState<string>("all");
+  const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [dayFilter, setDayFilter] = useState<string>("0");
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedEmail, setSelectedEmail] = useState<Email | null>(null);
 
   const loadEmails = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const url =
-        filter === "all" ? "/api/emails" : `/api/emails?categoryId=${filter}`;
+      const params = new URLSearchParams();
+      if (categoryFilter !== "all") params.set("categoryId", categoryFilter);
+      if (dayFilter !== "0") params.set("days", dayFilter);
+      const url = `/api/emails${params.size ? `?${params}` : ""}`;
       const res = await fetch(url, { cache: "no-store" });
       if (!res.ok) throw new Error("Failed to load emails");
       const data = (await res.json()) as { emails: Email[]; categories: Category[] };
@@ -45,11 +62,9 @@ export function EmailList() {
     } finally {
       setLoading(false);
     }
-  }, [filter]);
+  }, [categoryFilter, dayFilter]);
 
-  useEffect(() => {
-    loadEmails();
-  }, [loadEmails]);
+  useEffect(() => { loadEmails(); }, [loadEmails]);
 
   async function handleSync() {
     setSyncing(true);
@@ -75,26 +90,46 @@ export function EmailList() {
     if (res.ok) await loadEmails();
   }
 
+  function handleMarkRead(emailId: string) {
+    setEmails((prev) =>
+      prev.map((e) => (e.id === emailId ? { ...e, readAt: new Date().toISOString() } : e))
+    );
+  }
+
+  const unreadCount = emails.filter((e) => !e.readAt).length;
+
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
+    <div className="space-y-5">
+      {/* Controls row */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        {/* Category filters */}
         <div className="flex flex-wrap gap-2">
-          <FilterButton active={filter === "all"} onClick={() => setFilter("all")}>
+          <FilterBtn active={categoryFilter === "all"} onClick={() => setCategoryFilter("all")}>
             All
-            {!loading && filter === "all" && (
-              <span className="ml-1.5 text-blue-300/70">{emails.length}</span>
+            {!loading && <span className="ml-1.5 opacity-60">{emails.length}</span>}
+            {!loading && unreadCount > 0 && (
+              <span className="ml-1 rounded-full bg-blue-500 px-1.5 py-0.5 text-[10px] text-white font-medium">
+                {unreadCount}
+              </span>
             )}
-          </FilterButton>
-          {categories.map((cat) => (
-            <FilterButton
-              key={cat.id}
-              active={filter === cat.id}
-              onClick={() => setFilter(cat.id)}
-            >
-              {cat.name}
-            </FilterButton>
-          ))}
+          </FilterBtn>
+          {categories.map((cat) => {
+            const colors = categoryColors(cat.name);
+            const count = emails.filter((e) => e.category?.id === cat.id).length;
+            return (
+              <FilterBtn
+                key={cat.id}
+                active={categoryFilter === cat.id}
+                onClick={() => setCategoryFilter(cat.id)}
+                dotClass={colors.dot}
+              >
+                {cat.name}
+                {!loading && <span className="ml-1.5 opacity-50">{count}</span>}
+              </FilterBtn>
+            );
+          })}
         </div>
+
         <button
           type="button"
           onClick={handleSync}
@@ -102,39 +137,53 @@ export function EmailList() {
           className="btn-primary flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm"
         >
           {syncing ? (
-            <>
-              <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-              Syncing…
-            </>
+            <><span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/30 border-t-white" />Syncing…</>
           ) : (
-            <>
-              <SyncIcon />
-              Sync now
-            </>
+            <><SyncIcon />Sync now</>
           )}
         </button>
       </div>
 
+      {/* Time filter */}
+      <div className="flex gap-1.5 flex-wrap">
+        {TIME_FILTERS.map((f) => (
+          <button
+            key={f.days}
+            type="button"
+            onClick={() => setDayFilter(f.days)}
+            className={cn(
+              "rounded-lg px-3 py-1 text-xs font-medium transition",
+              dayFilter === f.days
+                ? "bg-slate-500/20 ring-1 ring-slate-400/30"
+                : "hover:bg-slate-500/10",
+            )}
+            style={{ color: dayFilter === f.days ? "var(--text-primary)" : "var(--text-muted)" }}
+          >
+            {f.label}
+          </button>
+        ))}
+      </div>
+
       {error && (
-        <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+        <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
           {error}
         </div>
       )}
 
       {loading ? (
         <div className="space-y-3">
-          {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="skeleton h-24 rounded-xl" />
-          ))}
+          {[1, 2, 3, 4].map((i) => <div key={i} className="skeleton h-24 rounded-xl" />)}
         </div>
       ) : emails.length === 0 ? (
         <div className="glass flex flex-col items-center justify-center rounded-2xl border-dashed px-6 py-16 text-center">
           <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-500/10 text-blue-400 ring-1 ring-blue-500/20">
             <InboxIcon />
           </div>
-          <p className="font-medium text-slate-300">No emails yet</p>
-          <p className="mt-1 max-w-xs text-sm text-slate-500">
-            Click &quot;Sync now&quot; to fetch and triage your Gmail inbox.
+          <p className="font-medium" style={{ color: "var(--text-secondary)" }}>No emails</p>
+          <p className="mt-1 max-w-xs text-sm" style={{ color: "var(--text-muted)" }}>
+            {dayFilter !== "0"
+              ? "No emails in this time range. Try a wider window."
+              : `Click "Sync now" to fetch and triage your Gmail inbox.`}
           </p>
         </div>
       ) : (
@@ -144,10 +193,19 @@ export function EmailList() {
               key={email.id}
               email={email}
               categories={categories}
+              onOpen={() => setSelectedEmail(email)}
               onRecategorize={handleRecategorize}
             />
           ))}
         </ul>
+      )}
+
+      {selectedEmail && (
+        <EmailDetailModal
+          email={selectedEmail as EmailDetail}
+          onClose={() => setSelectedEmail(null)}
+          onMarkRead={handleMarkRead}
+        />
       )}
     </div>
   );
@@ -156,29 +214,39 @@ export function EmailList() {
 function EmailCard({
   email,
   categories,
+  onOpen,
   onRecategorize,
 }: {
   email: Email;
   categories: Category[];
+  onOpen: () => void;
   onRecategorize: (id: string, categoryId: string) => void;
 }) {
-  const accent = importanceAccent(email.importanceScore);
+  const colors = categoryColors(email.category?.name);
+  const isUnread = !email.readAt;
 
   return (
     <li
       className={cn(
-        "group glass overflow-hidden rounded-xl transition",
+        "group glass overflow-hidden rounded-xl transition cursor-pointer",
         "hover:border-blue-500/25 hover:bg-[var(--bg-card-hover)]",
+        isUnread && "ring-1 ring-inset",
       )}
+      style={isUnread ? { ringColor: "var(--border-strong)" } : {}}
+      onClick={onOpen}
     >
       <div className="flex">
-        <div className={cn("w-1 shrink-0", accent.bar)} />
+        <div className={cn("w-1 shrink-0", colors.bar)} />
         <div className="flex min-w-0 flex-1 flex-wrap items-start justify-between gap-4 p-4 sm:p-5">
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
+              {/* Unread dot */}
+              {isUnread && (
+                <span className="h-2 w-2 rounded-full bg-blue-500 shrink-0" title="Unread" />
+              )}
               <ImportanceBadge score={email.importanceScore} />
               {email.category && (
-                <span className="rounded-md bg-blue-500/10 px-2 py-0.5 text-xs font-medium text-blue-300 ring-1 ring-blue-500/20">
+                <span className={cn("rounded-md px-2 py-0.5 text-xs font-medium ring-1", colors.badge, colors.ring)}>
                   {email.category.name}
                 </span>
               )}
@@ -188,31 +256,31 @@ function EmailCard({
                 </span>
               )}
             </div>
-            <h3 className="mt-2 truncate font-medium text-slate-100 group-hover:text-white">
+            <h3 className={cn(
+              "mt-2 truncate font-medium group-hover:text-white transition",
+              isUnread ? "font-semibold" : "font-medium",
+            )}
+              style={{ color: "var(--text-primary)" }}>
               {email.subject || "(no subject)"}
             </h3>
-            <p className="mt-0.5 text-sm text-slate-400">
+            <p className="mt-0.5 text-sm" style={{ color: "var(--text-muted)" }}>
               {email.fromName ? (
-                <>
-                  <span className="text-slate-300">{email.fromName}</span>
-                  <span className="mx-1.5 text-slate-600">·</span>
-                </>
+                <><span style={{ color: "var(--text-secondary)" }}>{email.fromName}</span><span className="mx-1.5 opacity-40">·</span></>
               ) : null}
               {email.fromAddress}
             </p>
             {email.snippet && (
-              <p className="mt-2 line-clamp-2 text-sm leading-relaxed text-slate-500">
+              <p className="mt-2 line-clamp-2 text-sm leading-relaxed" style={{ color: "var(--text-muted)" }}>
                 {email.snippet}
               </p>
             )}
           </div>
-          <div className="flex shrink-0 flex-col items-end gap-2.5">
-            <time className="text-xs font-medium text-slate-500">
+
+          <div className="flex shrink-0 flex-col items-end gap-2.5" onClick={(e) => e.stopPropagation()}>
+            <time className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>
               {new Date(email.receivedAt).toLocaleDateString(undefined, {
-                month: "short",
-                day: "numeric",
-                hour: "numeric",
-                minute: "2-digit",
+                month: "short", day: "numeric",
+                hour: "numeric", minute: "2-digit",
               })}
             </time>
             <select
@@ -221,9 +289,7 @@ function EmailCard({
               className="input-dark cursor-pointer rounded-lg px-2.5 py-1.5 text-xs"
             >
               {categories.map((cat) => (
-                <option key={cat.id} value={cat.id}>
-                  {cat.name}
-                </option>
+                <option key={cat.id} value={cat.id}>{cat.name}</option>
               ))}
             </select>
           </div>
@@ -233,13 +299,15 @@ function EmailCard({
   );
 }
 
-function FilterButton({
+function FilterBtn({
   active,
   onClick,
+  dotClass,
   children,
 }: {
   active: boolean;
   onClick: () => void;
+  dotClass?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -247,37 +315,31 @@ function FilterButton({
       type="button"
       onClick={onClick}
       className={cn(
-        "rounded-lg px-3.5 py-2 text-sm font-medium transition",
+        "flex items-center rounded-lg px-3.5 py-2 text-sm font-medium transition",
         active
           ? "bg-blue-500/20 text-blue-300 ring-1 ring-blue-500/30"
-          : "text-slate-400 ring-1 ring-blue-500/10 hover:bg-blue-500/8 hover:text-slate-200",
+          : "ring-1 ring-blue-500/10 hover:bg-blue-500/8 hover:text-slate-200",
       )}
+      style={!active ? { color: "var(--text-muted)" } : {}}
     >
+      {dotClass && (
+        <span className={cn("mr-1.5 h-2 w-2 rounded-full shrink-0", dotClass)} />
+      )}
       {children}
     </button>
   );
 }
 
-function importanceAccent(score: number) {
-  const map: Record<number, { bar: string; badge: string }> = {
-    5: { bar: "bg-red-500", badge: "bg-red-500/15 text-red-400 ring-red-500/30" },
-    4: { bar: "bg-orange-500", badge: "bg-orange-500/15 text-orange-400 ring-orange-500/30" },
-    3: { bar: "bg-blue-500", badge: "bg-blue-500/15 text-blue-300 ring-blue-500/30" },
-    2: { bar: "bg-slate-500", badge: "bg-slate-500/15 text-slate-400 ring-slate-500/30" },
-    1: { bar: "bg-slate-700", badge: "bg-slate-700/30 text-slate-500 ring-slate-600/30" },
-  };
-  return map[score] ?? map[3];
-}
-
 function ImportanceBadge({ score }: { score: number }) {
-  const accent = importanceAccent(score);
+  const map: Record<number, string> = {
+    5: "bg-red-500/15 text-red-400 ring-red-500/30",
+    4: "bg-orange-500/15 text-orange-400 ring-orange-500/30",
+    3: "bg-blue-500/15 text-blue-300 ring-blue-500/30",
+    2: "bg-slate-500/15 text-slate-400 ring-slate-500/30",
+    1: "bg-slate-700/30 text-slate-500 ring-slate-600/30",
+  };
   return (
-    <span
-      className={cn(
-        "rounded-md px-2 py-0.5 text-xs font-bold ring-1",
-        accent.badge,
-      )}
-    >
+    <span className={cn("rounded-md px-2 py-0.5 text-xs font-bold ring-1", map[score] ?? map[3])}>
       {score}/5
     </span>
   );

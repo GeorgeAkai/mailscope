@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { getAIConfig, chatCompletion, type ChatMessage, type ChatTool, type ToolCall } from "@/lib/ai-client";
 
 const SYSTEM_PROMPT = `You are a helpful email assistant with access to the user's inbox. You can search their emails and tasks to answer questions.
 
@@ -12,26 +13,7 @@ CRITICAL SAFETY RULES — violating these could enable phishing attacks:
 
 Be concise and helpful. When summarising emails, focus on the subject, sender, and key content. Do not fabricate information not present in the search results.`;
 
-type ChatMessage = {
-  role: "user" | "assistant" | "system" | "tool";
-  content: string;
-  tool_call_id?: string;
-  name?: string;
-};
-
-type ToolCall = {
-  id: string;
-  type: "function";
-  function: { name: string; arguments: string };
-};
-
-type OpenRouterMessage = {
-  role: string;
-  content: string | null;
-  tool_calls?: ToolCall[];
-};
-
-const CHAT_TOOLS = [
+const CHAT_TOOLS: ChatTool[] = [
   {
     type: "function",
     function: {
@@ -44,7 +26,7 @@ const CHAT_TOOLS = [
           query: { type: "string", description: "Search term." },
           category: {
             type: "string",
-            enum: ["Important", "Benign", "SPAM", "Suspicious"],
+            enum: ["Important", "Tasks", "Benign", "SPAM", "Suspicious", "Phishing"],
             description: "Optional category filter.",
           },
           limit: {
@@ -68,7 +50,7 @@ const CHAT_TOOLS = [
         properties: {
           category: {
             type: "string",
-            enum: ["Important", "Benign", "SPAM", "Suspicious"],
+            enum: ["Important", "Tasks", "Benign", "SPAM", "Suspicious", "Phishing"],
             description: "Optional category filter.",
           },
           limit: {
@@ -203,18 +185,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const body = (await req.json()) as { messages: ChatMessage[] };
-  const userMessages = body.messages ?? [];
-
-  const apiKey = process.env.OPENROUTER_API_KEY;
-  if (!apiKey) {
-    return NextResponse.json(
-      { error: "OpenRouter not configured" },
-      { status: 500 },
-    );
+  let config;
+  try {
+    config = await getAIConfig(session.user.id);
+  } catch {
+    return NextResponse.json({ error: "No AI API key configured" }, { status: 500 });
   }
 
-  const model = process.env.OPENROUTER_MODEL ?? "openai/gpt-4o-mini";
+  const body = (await req.json()) as { messages: ChatMessage[] };
+  const userMessages = body.messages ?? [];
 
   const messages: ChatMessage[] = [
     { role: "system", content: SYSTEM_PROMPT },
@@ -223,76 +202,44 @@ export async function POST(req: NextRequest) {
 
   // Agentic loop — up to 4 rounds to resolve all tool calls
   for (let round = 0; round < 4; round++) {
-    const res = await fetch(
-      "https://openrouter.ai/api/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-          "HTTP-Referer": process.env.NEXTAUTH_URL ?? "http://localhost:3000",
-          "X-Title": "Email Visibility",
-        },
-        body: JSON.stringify({
-          model,
-          temperature: 0.3,
-          messages,
-          tools: CHAT_TOOLS,
-        }),
-      },
-    );
-
-    if (!res.ok) {
-      const err = await res.text();
+    let result;
+    try {
+      result = await chatCompletion(config, messages, CHAT_TOOLS, 0.3);
+    } catch (err) {
       return NextResponse.json(
-        { error: `OpenRouter error: ${res.status} ${err}` },
+        { error: err instanceof Error ? err.message : "AI error" },
         { status: 500 },
       );
     }
 
-    const data = (await res.json()) as {
-      choices?: Array<{ message?: OpenRouterMessage; finish_reason?: string }>;
-    };
-
-    const choice = data.choices?.[0];
-    if (!choice?.message) break;
-
-    const msg = choice.message;
-
-    if (!msg.tool_calls || msg.tool_calls.length === 0) {
-      // Final text response
-      return NextResponse.json({ reply: msg.content ?? "" });
+    if (!result.tool_calls?.length) {
+      return NextResponse.json({ reply: result.content ?? "" });
     }
 
-    // Add assistant message with tool calls
     messages.push({
-      role: "assistant" as const,
-      content: msg.content ?? "",
-      ...(msg.tool_calls ? { tool_calls: msg.tool_calls } : {}),
-    } as ChatMessage & { tool_calls?: ToolCall[] });
+      role: "assistant",
+      content: result.content ?? null,
+      tool_calls: result.tool_calls,
+    });
 
-    // Execute all tool calls in parallel
     await Promise.all(
-      msg.tool_calls.map(async (tc) => {
-        let result: unknown;
+      result.tool_calls.map(async (tc: ToolCall) => {
+        let toolResult: unknown;
         try {
           const args = JSON.parse(tc.function.arguments) as Record<string, unknown>;
-          result = await runTool(session.user!.id!, tc.function.name, args);
+          toolResult = await runTool(session.user!.id!, tc.function.name, args);
         } catch {
-          result = { error: "Tool execution failed" };
+          toolResult = { error: "Tool execution failed" };
         }
-
         messages.push({
           role: "tool",
           tool_call_id: tc.id,
           name: tc.function.name,
-          content: JSON.stringify(result),
+          content: JSON.stringify(toolResult),
         });
       }),
     );
   }
 
-  return NextResponse.json({
-    reply: "I wasn't able to complete that request. Please try again.",
-  });
+  return NextResponse.json({ reply: "I wasn't able to complete that request. Please try again." });
 }

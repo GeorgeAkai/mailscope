@@ -1,13 +1,19 @@
 "use client";
 
 import { signIn } from "next-auth/react";
+import { cn } from "@/lib/cn";
 
-export function SignInButton() {
+export function SignInButton({ className }: { className?: string }) {
   return (
     <button
       type="button"
       onClick={() => signIn("google", { callbackUrl: "/dashboard" })}
-      className="inline-flex items-center gap-3 rounded-lg bg-white px-6 py-3 text-sm font-medium text-zinc-900 shadow-sm ring-1 ring-zinc-200 transition hover:bg-zinc-50"
+      className={cn(
+        "group inline-flex items-center gap-3 rounded-xl px-6 py-3.5 text-sm font-medium transition",
+        "bg-slate-900/80 text-slate-100 ring-1 ring-blue-500/20",
+        "hover:bg-slate-800/90 hover:ring-blue-500/40 hover:shadow-lg hover:shadow-blue-500/10",
+        className,
+      )}
     >
       <GoogleIcon />
       Sign in with Google

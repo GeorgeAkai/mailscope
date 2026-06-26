@@ -3,26 +3,24 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { Header } from "@/components/Header";
 import { CategoryManager } from "@/components/CategoryManager";
+import { ApiKeyManager } from "@/components/ApiKeyManager";
 
 export default async function SettingsPage() {
   const session = await auth();
-  if (!session?.user?.id) {
-    redirect("/login");
-  }
+  if (!session?.user?.id) redirect("/login");
 
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
     select: { onboarded: true },
   });
 
-  if (!user?.onboarded) {
-    redirect("/onboard");
-  }
+  if (!user?.onboarded) redirect("/onboard");
 
   return (
-    <div className="flex flex-1 flex-col">
-      <Header email={session.user.email} />
-      <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-8">
+    <div className="bg-grid flex flex-1 flex-col">
+      <Header email={session.user.email} activePath="settings" />
+      <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-8 sm:px-6 space-y-8">
+        <ApiKeyManager />
         <CategoryManager />
       </main>
     </div>

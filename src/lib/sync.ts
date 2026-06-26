@@ -90,6 +90,7 @@ async function upsertAndTriageMessage(
       bodyPreview: message.bodyPreview,
     },
     categories,
+    userId,
   );
 
   const categoryId = resolveCategoryId(triage.categoryName, categories);
@@ -182,6 +183,7 @@ export async function retriageUserEmails(userId: string) {
         bodyPreview: email.bodyPreview ?? "",
       },
       user.categories,
+      userId,
     );
 
     await prisma.email.update({

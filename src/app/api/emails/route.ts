@@ -12,6 +12,17 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url);
   const categoryFilter = searchParams.get("categoryId");
+  const daysParam = searchParams.get("days");
+
+  let startDate: Date | undefined;
+  if (daysParam && daysParam !== "0") {
+    const days = parseInt(daysParam, 10);
+    if (!isNaN(days) && days > 0) {
+      startDate = new Date();
+      startDate.setDate(startDate.getDate() - days);
+      startDate.setHours(0, 0, 0, 0);
+    }
+  }
 
   const categories = await prisma.category.findMany({
     where: { userId: session.user.id },
@@ -22,6 +33,7 @@ export async function GET(request: Request) {
     where: {
       userId: session.user.id,
       ...(categoryFilter ? { categoryId: categoryFilter } : {}),
+      ...(startDate ? { receivedAt: { gte: startDate } } : {}),
     },
     include: { category: true },
   });

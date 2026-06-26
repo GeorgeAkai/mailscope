@@ -14,6 +14,7 @@ export async function PATCH(request: Request, context: RouteContext) {
   const body = (await request.json()) as {
     categoryId?: string;
     importanceScore?: number;
+    markRead?: boolean;
   };
 
   const email = await prisma.email.findFirst({
@@ -33,6 +34,8 @@ export async function PATCH(request: Request, context: RouteContext) {
     }
   }
 
+  const isMetaChange = body.categoryId !== undefined || body.importanceScore !== undefined;
+
   const updated = await prisma.email.update({
     where: { id },
     data: {
@@ -40,7 +43,8 @@ export async function PATCH(request: Request, context: RouteContext) {
       ...(body.importanceScore !== undefined
         ? { importanceScore: Math.min(5, Math.max(1, body.importanceScore)) }
         : {}),
-      userOverride: true,
+      ...(body.markRead && !email.readAt ? { readAt: new Date() } : {}),
+      ...(isMetaChange ? { userOverride: true } : {}),
     },
     include: { category: true },
   });
