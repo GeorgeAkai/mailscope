@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { cn } from "@/lib/cn";
 
 type Category = {
   id: string;
@@ -34,7 +35,7 @@ export function EmailList() {
     try {
       const url =
         filter === "all" ? "/api/emails" : `/api/emails?categoryId=${filter}`;
-      const res = await fetch(url);
+      const res = await fetch(url, { cache: "no-store" });
       if (!res.ok) throw new Error("Failed to load emails");
       const data = (await res.json()) as { emails: Email[]; categories: Category[] };
       setEmails(data.emails);
@@ -80,6 +81,9 @@ export function EmailList() {
         <div className="flex flex-wrap gap-2">
           <FilterButton active={filter === "all"} onClick={() => setFilter("all")}>
             All
+            {!loading && filter === "all" && (
+              <span className="ml-1.5 text-blue-300/70">{emails.length}</span>
+            )}
           </FilterButton>
           {categories.map((cat) => (
             <FilterButton
@@ -95,79 +99,137 @@ export function EmailList() {
           type="button"
           onClick={handleSync}
           disabled={syncing}
-          className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-500 disabled:opacity-50"
+          className="btn-primary flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm"
         >
-          {syncing ? "Syncing…" : "Sync now"}
+          {syncing ? (
+            <>
+              <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+              Syncing…
+            </>
+          ) : (
+            <>
+              <SyncIcon />
+              Sync now
+            </>
+          )}
         </button>
       </div>
 
       {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
           {error}
         </div>
       )}
 
       {loading ? (
-        <p className="text-zinc-500">Loading emails…</p>
+        <div className="space-y-3">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="skeleton h-24 rounded-xl" />
+          ))}
+        </div>
       ) : emails.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-zinc-300 bg-white px-6 py-12 text-center">
-          <p className="text-zinc-600">No emails yet. Click &quot;Sync now&quot; to fetch your inbox.</p>
+        <div className="glass flex flex-col items-center justify-center rounded-2xl border-dashed px-6 py-16 text-center">
+          <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-500/10 text-blue-400 ring-1 ring-blue-500/20">
+            <InboxIcon />
+          </div>
+          <p className="font-medium text-slate-300">No emails yet</p>
+          <p className="mt-1 max-w-xs text-sm text-slate-500">
+            Click &quot;Sync now&quot; to fetch and triage your Gmail inbox.
+          </p>
         </div>
       ) : (
-        <ul className="divide-y divide-zinc-200 overflow-hidden rounded-xl border border-zinc-200 bg-white">
+        <ul className="space-y-2">
           {emails.map((email) => (
-            <li key={email.id} className="px-5 py-4 transition hover:bg-zinc-50">
-              <div className="flex flex-wrap items-start justify-between gap-4">
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <ImportanceBadge score={email.importanceScore} />
-                    {email.category && (
-                      <span className="rounded-full bg-zinc-100 px-2.5 py-0.5 text-xs font-medium text-zinc-700">
-                        {email.category.name}
-                      </span>
-                    )}
-                    {email.userOverride && (
-                      <span className="text-xs text-amber-600">Manual</span>
-                    )}
-                  </div>
-                  <h3 className="mt-1 truncate font-medium text-zinc-900">
-                    {email.subject || "(no subject)"}
-                  </h3>
-                  <p className="text-sm text-zinc-600">
-                    {email.fromName ? `${email.fromName} · ` : ""}
-                    {email.fromAddress}
-                  </p>
-                  {email.snippet && (
-                    <p className="mt-1 line-clamp-2 text-sm text-zinc-500">{email.snippet}</p>
-                  )}
-                </div>
-                <div className="flex shrink-0 flex-col items-end gap-2">
-                  <time className="text-xs text-zinc-400">
-                    {new Date(email.receivedAt).toLocaleDateString(undefined, {
-                      month: "short",
-                      day: "numeric",
-                      hour: "numeric",
-                      minute: "2-digit",
-                    })}
-                  </time>
-                  <select
-                    value={email.category?.id ?? ""}
-                    onChange={(e) => handleRecategorize(email.id, e.target.value)}
-                    className="rounded-md border border-zinc-200 px-2 py-1 text-xs text-zinc-700"
-                  >
-                    {categories.map((cat) => (
-                      <option key={cat.id} value={cat.id}>
-                        {cat.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            </li>
+            <EmailCard
+              key={email.id}
+              email={email}
+              categories={categories}
+              onRecategorize={handleRecategorize}
+            />
           ))}
         </ul>
       )}
     </div>
+  );
+}
+
+function EmailCard({
+  email,
+  categories,
+  onRecategorize,
+}: {
+  email: Email;
+  categories: Category[];
+  onRecategorize: (id: string, categoryId: string) => void;
+}) {
+  const accent = importanceAccent(email.importanceScore);
+
+  return (
+    <li
+      className={cn(
+        "group glass overflow-hidden rounded-xl transition",
+        "hover:border-blue-500/25 hover:bg-[var(--bg-card-hover)]",
+      )}
+    >
+      <div className="flex">
+        <div className={cn("w-1 shrink-0", accent.bar)} />
+        <div className="flex min-w-0 flex-1 flex-wrap items-start justify-between gap-4 p-4 sm:p-5">
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <ImportanceBadge score={email.importanceScore} />
+              {email.category && (
+                <span className="rounded-md bg-blue-500/10 px-2 py-0.5 text-xs font-medium text-blue-300 ring-1 ring-blue-500/20">
+                  {email.category.name}
+                </span>
+              )}
+              {email.userOverride && (
+                <span className="rounded-md bg-amber-500/10 px-2 py-0.5 text-xs text-amber-400 ring-1 ring-amber-500/20">
+                  Manual
+                </span>
+              )}
+            </div>
+            <h3 className="mt-2 truncate font-medium text-slate-100 group-hover:text-white">
+              {email.subject || "(no subject)"}
+            </h3>
+            <p className="mt-0.5 text-sm text-slate-400">
+              {email.fromName ? (
+                <>
+                  <span className="text-slate-300">{email.fromName}</span>
+                  <span className="mx-1.5 text-slate-600">·</span>
+                </>
+              ) : null}
+              {email.fromAddress}
+            </p>
+            {email.snippet && (
+              <p className="mt-2 line-clamp-2 text-sm leading-relaxed text-slate-500">
+                {email.snippet}
+              </p>
+            )}
+          </div>
+          <div className="flex shrink-0 flex-col items-end gap-2.5">
+            <time className="text-xs font-medium text-slate-500">
+              {new Date(email.receivedAt).toLocaleDateString(undefined, {
+                month: "short",
+                day: "numeric",
+                hour: "numeric",
+                minute: "2-digit",
+              })}
+            </time>
+            <select
+              value={email.category?.id ?? ""}
+              onChange={(e) => onRecategorize(email.id, e.target.value)}
+              className="input-dark cursor-pointer rounded-lg px-2.5 py-1.5 text-xs"
+            >
+              {categories.map((cat) => (
+                <option key={cat.id} value={cat.id}>
+                  {cat.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
+    </li>
   );
 }
 
@@ -184,31 +246,55 @@ function FilterButton({
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-full px-3 py-1.5 text-sm font-medium transition ${
+      className={cn(
+        "rounded-lg px-3.5 py-2 text-sm font-medium transition",
         active
-          ? "bg-indigo-600 text-white"
-          : "bg-white text-zinc-600 ring-1 ring-zinc-200 hover:bg-zinc-50"
-      }`}
+          ? "bg-blue-500/20 text-blue-300 ring-1 ring-blue-500/30"
+          : "text-slate-400 ring-1 ring-blue-500/10 hover:bg-blue-500/8 hover:text-slate-200",
+      )}
     >
       {children}
     </button>
   );
 }
 
-function ImportanceBadge({ score }: { score: number }) {
-  const colors: Record<number, string> = {
-    5: "bg-red-100 text-red-700",
-    4: "bg-orange-100 text-orange-700",
-    3: "bg-yellow-100 text-yellow-700",
-    2: "bg-blue-100 text-blue-700",
-    1: "bg-zinc-100 text-zinc-600",
+function importanceAccent(score: number) {
+  const map: Record<number, { bar: string; badge: string }> = {
+    5: { bar: "bg-red-500", badge: "bg-red-500/15 text-red-400 ring-red-500/30" },
+    4: { bar: "bg-orange-500", badge: "bg-orange-500/15 text-orange-400 ring-orange-500/30" },
+    3: { bar: "bg-blue-500", badge: "bg-blue-500/15 text-blue-300 ring-blue-500/30" },
+    2: { bar: "bg-slate-500", badge: "bg-slate-500/15 text-slate-400 ring-slate-500/30" },
+    1: { bar: "bg-slate-700", badge: "bg-slate-700/30 text-slate-500 ring-slate-600/30" },
   };
+  return map[score] ?? map[3];
+}
 
+function ImportanceBadge({ score }: { score: number }) {
+  const accent = importanceAccent(score);
   return (
     <span
-      className={`rounded-full px-2 py-0.5 text-xs font-semibold ${colors[score] ?? colors[3]}`}
+      className={cn(
+        "rounded-md px-2 py-0.5 text-xs font-bold ring-1",
+        accent.badge,
+      )}
     >
       {score}/5
     </span>
+  );
+}
+
+function SyncIcon() {
+  return (
+    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+    </svg>
+  );
+}
+
+function InboxIcon() {
+  return (
+    <svg className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 13.5h3.86a2.25 2.25 0 012.012 1.244l.256.512a2.25 2.25 0 002.013 1.244h3.218a2.25 2.25 0 002.013-1.244l.256-.512a2.25 2.25 0 012.013-1.244h3.859m-19.5.338V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18v-4.162c0-.224-.012-.447-.037-.666A48.394 48.394 0 0012 15c-2.305 0-4.47-.402-6.39-1.137a48.52 48.52 0 01-.037-.666V13.5" />
+    </svg>
   );
 }

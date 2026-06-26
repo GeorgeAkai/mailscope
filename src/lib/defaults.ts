@@ -1,18 +1,27 @@
 export const DEFAULT_CATEGORIES = [
   {
-    name: "Job",
-    description: "Recruiting, interviews, job applications, career opportunities",
+    name: "Important",
+    description:
+      "Interview invites, job offers, security alerts, 2FA codes, subscription receipts, shopping orders, assignment deadlines, bank alerts, document submissions",
     priority: 0,
   },
   {
-    name: "Other",
-    description: "Personal, transactional, and general correspondence",
+    name: "Benign",
+    description:
+      "Job application acknowledgements, generic account activity, software update notices, newsletters you signed up for",
     priority: 1,
   },
   {
-    name: "Spam",
-    description: "Promotions, newsletters, marketing, junk, and low-value bulk mail",
+    name: "SPAM",
+    description:
+      "Unsolicited promotions, mass marketing, cold outreach, lottery and prize notifications, unwanted bulk mail",
     priority: 2,
+  },
+  {
+    name: "Suspicious",
+    description:
+      "Potential phishing, urgent credential or money requests, sender domain mismatch, suspicious urgency, requests to verify accounts via unknown links",
+    priority: 3,
   },
 ] as const;
 

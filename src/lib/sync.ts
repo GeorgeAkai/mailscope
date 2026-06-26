@@ -11,8 +11,32 @@ function resolveCategoryId(
   const match = categories.find((c) => c.name.toLowerCase() === normalized);
   if (match) return match.id;
 
-  const other = categories.find((c) => c.name.toLowerCase() === "other");
-  return other?.id ?? categories[0]?.id ?? null;
+  // Fall back to Benign as the catch-all safe category
+  const benign = categories.find((c) => c.name.toLowerCase() === "benign");
+  return benign?.id ?? categories[0]?.id ?? null;
+}
+
+async function persistTasks(
+  userId: string,
+  emailId: string,
+  tasks: Array<{ title: string; dueDate?: string | null; priority: number }>,
+) {
+  // Remove incomplete tasks from previous triage; keep completed ones
+  await prisma.task.deleteMany({
+    where: { emailId, completed: false },
+  });
+
+  if (tasks.length === 0) return;
+
+  await prisma.task.createMany({
+    data: tasks.map((t) => ({
+      userId,
+      emailId,
+      title: t.title,
+      dueDate: t.dueDate ? new Date(t.dueDate) : null,
+      priority: t.priority,
+    })),
+  });
 }
 
 async function upsertAndTriageMessage(
@@ -25,6 +49,7 @@ async function upsertAndTriageMessage(
     where: { userId_gmailId: { userId, gmailId: message.gmailId } },
   });
 
+  // User manually overrode — only update metadata, never retriage
   if (existing?.userOverride) {
     return prisma.email.update({
       where: { id: existing.id },
@@ -40,6 +65,7 @@ async function upsertAndTriageMessage(
     });
   }
 
+  // Already classified and no forced retriage — only update metadata
   if (existing && !forceRetriage) {
     return prisma.email.update({
       where: { id: existing.id },
@@ -55,26 +81,21 @@ async function upsertAndTriageMessage(
     });
   }
 
-  let categoryId = existing?.categoryId ?? null;
-  let importanceScore = existing?.importanceScore ?? 3;
+  const triage = await triageEmail(
+    {
+      subject: message.subject,
+      fromAddress: message.fromAddress,
+      fromName: message.fromName,
+      snippet: message.snippet,
+      bodyPreview: message.bodyPreview,
+    },
+    categories,
+  );
 
-  if (!existing || forceRetriage) {
-    const triage = await triageEmail(
-      {
-        subject: message.subject,
-        fromAddress: message.fromAddress,
-        fromName: message.fromName,
-        snippet: message.snippet,
-        bodyPreview: message.bodyPreview,
-      },
-      categories,
-    );
+  const categoryId = resolveCategoryId(triage.categoryName, categories);
+  const importanceScore = triage.importanceScore;
 
-    categoryId = resolveCategoryId(triage.categoryName, categories);
-    importanceScore = triage.importanceScore;
-  }
-
-  return prisma.email.upsert({
+  const email = await prisma.email.upsert({
     where: { userId_gmailId: { userId, gmailId: message.gmailId } },
     create: {
       userId,
@@ -103,21 +124,23 @@ async function upsertAndTriageMessage(
       triagedAt: new Date(),
     },
   });
+
+  await persistTasks(userId, email.id, triage.tasks);
+
+  return email;
 }
 
-export async function syncUserEmails(userId: string, options?: { retriage?: boolean }) {
+export async function syncUserEmails(
+  userId: string,
+  options?: { retriage?: boolean },
+) {
   const user = await prisma.user.findUnique({
     where: { id: userId },
     include: { categories: { orderBy: { priority: "asc" } } },
   });
 
-  if (!user?.onboarded) {
-    throw new Error("User has not completed onboarding");
-  }
-
-  if (user.categories.length === 0) {
-    throw new Error("No categories configured");
-  }
+  if (!user?.onboarded) throw new Error("User has not completed onboarding");
+  if (user.categories.length === 0) throw new Error("No categories configured");
 
   const messages = await fetchInboxMessages(userId, user.syncDays);
   let processed = 0;
@@ -170,6 +193,8 @@ export async function retriageUserEmails(userId: string) {
       },
     });
 
+    await persistTasks(userId, email.id, triage.tasks);
+
     retriaged++;
     await new Promise((resolve) => setTimeout(resolve, 200));
   }
@@ -183,7 +208,12 @@ export async function syncAllUsers() {
     select: { id: true, email: true },
   });
 
-  const results: Array<{ userId: string; email: string | null; processed: number; error?: string }> = [];
+  const results: Array<{
+    userId: string;
+    email: string | null;
+    processed: number;
+    error?: string;
+  }> = [];
 
   for (const user of users) {
     try {
