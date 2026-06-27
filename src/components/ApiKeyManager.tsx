@@ -92,6 +92,26 @@ export function ApiKeyManager() {
         </p>
       </div>
 
+      {config && !config.hasKey && (
+        <div
+          className="flex items-start gap-3 rounded-xl border px-4 py-3 text-sm"
+          style={{
+            borderColor: "rgba(234,179,8,0.3)",
+            background: "rgba(234,179,8,0.05)",
+          }}
+        >
+          <span className="mt-0.5 shrink-0 text-yellow-400">⚠</span>
+          <p style={{ color: "var(--text-secondary)" }}>
+            No API key configured — emails are being triaged using{" "}
+            <span className="font-medium" style={{ color: "var(--text-primary)" }}>
+              basic keyword rules
+            </span>
+            . Results may be less accurate than AI triage. Add a key below to enable
+            full AI-powered classification.
+          </p>
+        </div>
+      )}
+
       {config?.hasKey && (
         <div className="flex items-center justify-between rounded-xl border px-4 py-3 text-sm"
           style={{ borderColor: "var(--border)", background: "var(--bg-elevated)" }}>

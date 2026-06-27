@@ -13,8 +13,10 @@ model User {
   email         String?    @unique
   emailVerified DateTime?
   image         String?
-  syncDays      Int        @default(30)
-  onboarded     Boolean    @default(false)
+  syncDays           Int       @default(30)
+  syncIntervalHours  Int       @default(1)
+  lastSyncedAt       DateTime?
+  onboarded          Boolean   @default(false)
   llmProvider   String?
   llmApiKey     String?
   llmModel      String?

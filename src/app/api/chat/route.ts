@@ -188,8 +188,11 @@ export async function POST(req: NextRequest) {
   let config;
   try {
     config = await getAIConfig(session.user.id);
-  } catch {
-    return NextResponse.json({ error: "No AI API key configured" }, { status: 500 });
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "No AI API key configured" },
+      { status: 400 },
+    );
   }
 
   const body = (await req.json()) as { messages: ChatMessage[] };

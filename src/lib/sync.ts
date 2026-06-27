@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { fetchInboxMessages, GmailMessage } from "@/lib/gmail";
 import { triageEmail } from "@/lib/openrouter";
+import { manualTriage } from "@/lib/manual-triage";
 import type { Category } from "@/generated/prisma/client";
 
 function resolveCategoryId(
@@ -49,39 +50,60 @@ async function upsertAndTriageMessage(
     where: { userId_gmailId: { userId, gmailId: message.gmailId } },
   });
 
+  const metadataFields = {
+    threadId: message.threadId,
+    subject: message.subject,
+    fromAddress: message.fromAddress,
+    fromName: message.fromName,
+    snippet: message.snippet,
+    bodyPreview: message.bodyPreview,
+    receivedAt: message.receivedAt,
+  };
+
   // User manually overrode — only update metadata, never retriage
   if (existing?.userOverride) {
-    return prisma.email.update({
-      where: { id: existing.id },
-      data: {
-        threadId: message.threadId,
-        subject: message.subject,
-        fromAddress: message.fromAddress,
-        fromName: message.fromName,
-        snippet: message.snippet,
-        bodyPreview: message.bodyPreview,
-        receivedAt: message.receivedAt,
-      },
-    });
+    return prisma.email.update({ where: { id: existing.id }, data: metadataFields });
   }
 
   // Already classified and no forced retriage — only update metadata
   if (existing && !forceRetriage) {
-    return prisma.email.update({
-      where: { id: existing.id },
-      data: {
-        threadId: message.threadId,
+    return prisma.email.update({ where: { id: existing.id }, data: metadataFields });
+  }
+
+  // Attempt AI triage; fall back to manual rules if no key configured
+  try {
+    const triage = await triageEmail(
+      {
         subject: message.subject,
         fromAddress: message.fromAddress,
         fromName: message.fromName,
         snippet: message.snippet,
         bodyPreview: message.bodyPreview,
-        receivedAt: message.receivedAt,
       },
+      categories,
+      userId,
+    );
+
+    const triageFields = {
+      categoryId: resolveCategoryId(triage.categoryName, categories),
+      importanceScore: triage.importanceScore,
+      triagedAt: new Date(),
+    };
+
+    const email = await prisma.email.upsert({
+      where: { userId_gmailId: { userId, gmailId: message.gmailId } },
+      create: { userId, gmailId: message.gmailId, ...metadataFields, ...triageFields },
+      update: { ...metadataFields, ...triageFields },
     });
+
+    await persistTasks(userId, email.id, triage.tasks);
+    return email;
+  } catch (err) {
+    if (!(err instanceof Error && err.message.startsWith("No AI key configured"))) throw err;
   }
 
-  const triage = await triageEmail(
+  // No AI key — use rule-based manual triage
+  const manual = manualTriage(
     {
       subject: message.subject,
       fromAddress: message.fromAddress,
@@ -90,45 +112,23 @@ async function upsertAndTriageMessage(
       bodyPreview: message.bodyPreview,
     },
     categories,
-    userId,
   );
 
-  const categoryId = resolveCategoryId(triage.categoryName, categories);
-  const importanceScore = triage.importanceScore;
-
-  const email = await prisma.email.upsert({
+  return prisma.email.upsert({
     where: { userId_gmailId: { userId, gmailId: message.gmailId } },
     create: {
-      userId,
-      gmailId: message.gmailId,
-      threadId: message.threadId,
-      subject: message.subject,
-      fromAddress: message.fromAddress,
-      fromName: message.fromName,
-      snippet: message.snippet,
-      bodyPreview: message.bodyPreview,
-      receivedAt: message.receivedAt,
-      categoryId,
-      importanceScore,
+      userId, gmailId: message.gmailId, ...metadataFields,
+      categoryId: resolveCategoryId(manual.categoryName, categories),
+      importanceScore: manual.importanceScore,
       triagedAt: new Date(),
     },
     update: {
-      threadId: message.threadId,
-      subject: message.subject,
-      fromAddress: message.fromAddress,
-      fromName: message.fromName,
-      snippet: message.snippet,
-      bodyPreview: message.bodyPreview,
-      receivedAt: message.receivedAt,
-      categoryId,
-      importanceScore,
+      ...metadataFields,
+      categoryId: resolveCategoryId(manual.categoryName, categories),
+      importanceScore: manual.importanceScore,
       triagedAt: new Date(),
     },
   });
-
-  await persistTasks(userId, email.id, triage.tasks);
-
-  return email;
 }
 
 export async function syncUserEmails(
@@ -156,6 +156,11 @@ export async function syncUserEmails(
     processed++;
   }
 
+  await prisma.user.update({
+    where: { id: userId },
+    data: { lastSyncedAt: new Date() },
+  });
+
   return { processed, total: messages.length };
 }
 
@@ -167,6 +172,8 @@ export async function retriageUserEmails(userId: string) {
 
   if (!user) throw new Error("User not found");
 
+  const useManual = !user.llmApiKey || !user.llmProvider;
+
   const emails = await prisma.email.findMany({
     where: { userId, userOverride: false },
   });
@@ -174,31 +181,53 @@ export async function retriageUserEmails(userId: string) {
   let retriaged = 0;
 
   for (const email of emails) {
-    const triage = await triageEmail(
-      {
-        subject: email.subject ?? "",
-        fromAddress: email.fromAddress,
-        fromName: email.fromName,
-        snippet: email.snippet ?? "",
-        bodyPreview: email.bodyPreview ?? "",
-      },
-      user.categories,
-      userId,
-    );
+    if (useManual) {
+      const manual = manualTriage(
+        {
+          subject: email.subject ?? "",
+          fromAddress: email.fromAddress,
+          fromName: email.fromName,
+          snippet: email.snippet ?? "",
+          bodyPreview: email.bodyPreview ?? "",
+        },
+        user.categories,
+      );
 
-    await prisma.email.update({
-      where: { id: email.id },
-      data: {
-        categoryId: resolveCategoryId(triage.categoryName, user.categories),
-        importanceScore: triage.importanceScore,
-        triagedAt: new Date(),
-      },
-    });
+      await prisma.email.update({
+        where: { id: email.id },
+        data: {
+          categoryId: resolveCategoryId(manual.categoryName, user.categories),
+          importanceScore: manual.importanceScore,
+          triagedAt: new Date(),
+        },
+      });
+    } else {
+      const triage = await triageEmail(
+        {
+          subject: email.subject ?? "",
+          fromAddress: email.fromAddress,
+          fromName: email.fromName,
+          snippet: email.snippet ?? "",
+          bodyPreview: email.bodyPreview ?? "",
+        },
+        user.categories,
+        userId,
+      );
 
-    await persistTasks(userId, email.id, triage.tasks);
+      await prisma.email.update({
+        where: { id: email.id },
+        data: {
+          categoryId: resolveCategoryId(triage.categoryName, user.categories),
+          importanceScore: triage.importanceScore,
+          triagedAt: new Date(),
+        },
+      });
+
+      await persistTasks(userId, email.id, triage.tasks);
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
 
     retriaged++;
-    await new Promise((resolve) => setTimeout(resolve, 200));
   }
 
   return { retriaged };
@@ -207,17 +236,28 @@ export async function retriageUserEmails(userId: string) {
 export async function syncAllUsers() {
   const users = await prisma.user.findMany({
     where: { onboarded: true },
-    select: { id: true, email: true },
+    select: { id: true, email: true, syncIntervalHours: true, lastSyncedAt: true },
+  });
+
+  const now = Date.now();
+
+  // Respect per-user sync interval — skip users synced too recently
+  const dueUsers = users.filter((u) => {
+    if (u.syncIntervalHours === 0) return false; // manual-only users
+    if (!u.lastSyncedAt) return true;            // never synced
+    const msInterval = u.syncIntervalHours * 60 * 60 * 1000;
+    return now - u.lastSyncedAt.getTime() >= msInterval;
   });
 
   const results: Array<{
     userId: string;
     email: string | null;
     processed: number;
+    skipped?: boolean;
     error?: string;
   }> = [];
 
-  for (const user of users) {
+  for (const user of dueUsers) {
     try {
       const { processed } = await syncUserEmails(user.id);
       results.push({ userId: user.id, email: user.email, processed });
@@ -229,6 +269,12 @@ export async function syncAllUsers() {
         error: error instanceof Error ? error.message : "Unknown error",
       });
     }
+  }
+
+  // Report skipped users too
+  const skippedCount = users.length - dueUsers.length;
+  if (skippedCount > 0) {
+    results.push({ userId: "skipped", email: null, processed: 0, skipped: true });
   }
 
   return results;

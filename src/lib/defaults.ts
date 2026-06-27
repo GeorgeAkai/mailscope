@@ -94,3 +94,13 @@ export function categoryColors(name: string | null | undefined) {
 
 export const SYNC_DAY_OPTIONS = [7, 30, 90] as const;
 export type SyncDays = (typeof SYNC_DAY_OPTIONS)[number];
+
+export const SYNC_INTERVAL_OPTIONS = [
+  { value: 0,  label: "Manual only" },
+  { value: 1,  label: "Every hour" },
+  { value: 4,  label: "Every 4 hours" },
+  { value: 12, label: "Every 12 hours" },
+  { value: 24, label: "Once a day" },
+] as const;
+
+export type SyncIntervalHours = (typeof SYNC_INTERVAL_OPTIONS)[number]["value"];

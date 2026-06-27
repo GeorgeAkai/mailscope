@@ -94,17 +94,9 @@ type ToolCallArg = {
 export async function triageEmail(
   email: TriageInput,
   categories: CategoryForTriage[],
-  userId?: string,
+  userId: string,
 ): Promise<TriageResult> {
-  const config = userId
-    ? await getAIConfig(userId)
-    : {
-        provider: "openrouter" as const,
-        apiKey: process.env.OPENROUTER_API_KEY ?? "",
-        model: process.env.OPENROUTER_MODEL ?? "openai/gpt-4o-mini",
-      };
-
-  if (!config.apiKey) throw new Error("No AI API key configured");
+  const config = await getAIConfig(userId);
 
   const categoryEnum = categories.map((c) => c.name).join(", ");
   const categoryList = categories
@@ -169,7 +161,7 @@ Body: ${email.bodyPreview}`;
 export async function triageEmailsBatch(
   emails: TriageInput[],
   categories: CategoryForTriage[],
-  userId?: string,
+  userId: string,
   onProgress?: (index: number) => void,
 ): Promise<TriageResult[]> {
   const results: TriageResult[] = [];

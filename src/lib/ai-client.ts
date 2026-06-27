@@ -88,14 +88,7 @@ export async function getAIConfig(userId: string): Promise<AIConfig> {
     };
   }
 
-  const apiKey = process.env.OPENROUTER_API_KEY;
-  if (!apiKey) throw new Error("No AI API key configured");
-
-  return {
-    provider: "openrouter",
-    apiKey,
-    model: process.env.OPENROUTER_MODEL ?? DEFAULT_MODELS.openrouter,
-  };
+  throw new Error("No AI key configured. Go to Settings → AI Engine to add your API key.");
 }
 
 /* ── OpenAI-compatible (OpenRouter + OpenAI) ── */
