@@ -10,8 +10,8 @@ export function Logo({
   size?: "sm" | "md" | "lg";
   showText?: boolean;
 }) {
-  const iconSize = size === "sm" ? "h-7 w-7" : size === "lg" ? "h-10 w-10" : "h-8 w-8";
-  const textSize = size === "sm" ? "text-base" : size === "lg" ? "text-xl" : "text-lg";
+  const iconSize = size === "sm" ? "h-10 w-10" : size === "lg" ? "h-14 w-14" : "h-12 w-12";
+  const textSize = size === "sm" ? "text-base" : size === "lg" ? "text-2xl" : "text-xl";
 
   return (
     <Link href={href} className="group flex items-center gap-2.5">
