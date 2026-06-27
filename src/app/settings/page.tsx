@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { Header } from "@/components/Header";
 import { CategoryManager } from "@/components/CategoryManager";
 import { ApiKeyManager } from "@/components/ApiKeyManager";
+import { DangerZone } from "@/components/DangerZone";
 
 export default async function SettingsPage() {
   const session = await auth();
@@ -22,6 +23,7 @@ export default async function SettingsPage() {
       <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-8 sm:px-6 space-y-8">
         <ApiKeyManager />
         <CategoryManager />
+        <DangerZone />
       </main>
     </div>
   );

@@ -3,6 +3,24 @@ import { useEffect } from "react";
 import { categoryColors } from "@/lib/defaults";
 import { cn } from "@/lib/cn";
 
+function toPlainText(raw: string): string {
+  return raw
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/?(p|div|tr|li|h[1-6]|blockquote|section|article)[^>]*>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)))
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 export type EmailDetail = {
   id: string;
   gmailId: string;
@@ -104,7 +122,7 @@ export function EmailDetailModal({
               className="whitespace-pre-wrap break-words text-sm leading-relaxed font-sans"
               style={{ color: "var(--text-secondary)" }}
             >
-              {email.bodyPreview}
+              {toPlainText(email.bodyPreview)}
             </pre>
           ) : (
             <p className="text-sm italic" style={{ color: "var(--text-muted)" }}>

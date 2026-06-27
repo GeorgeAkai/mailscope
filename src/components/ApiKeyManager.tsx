@@ -71,7 +71,7 @@ export function ApiKeyManager() {
       setApiKey("");
       setModel("");
       setProvider("openrouter");
-      setStatus({ type: "success", msg: "Cleared. Falling back to server default key." });
+      setStatus({ type: "success", msg: "Key revoked. Paste a new key below to re-enable AI triage." });
     } catch {
       setStatus({ type: "error", msg: "Failed to clear key." });
     } finally {
@@ -107,7 +107,7 @@ export function ApiKeyManager() {
           </span>
           <button type="button" onClick={handleClear} disabled={saving}
             className="text-xs text-red-400 hover:text-red-300 transition disabled:opacity-50">
-            Remove
+            Revoke key
           </button>
         </div>
       )}

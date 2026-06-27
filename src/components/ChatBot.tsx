@@ -5,6 +5,9 @@ import { cn } from "@/lib/cn";
 
 type Message = { role: "user" | "assistant"; content: string };
 
+const WELCOME_MESSAGE =
+  "Hi! I'm your MailScope assistant. Ask me anything about your inbox — I can find emails, summarize threads, surface deadlines, or flag anything suspicious.\n\nTry: \"Do I have any upcoming tasks?\" or \"Show me recent emails from Google.\"";
+
 export function ChatBot() {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -80,47 +83,67 @@ export function ChatBot() {
 
       {/* Chat panel */}
       {open && (
-        <div className="fixed bottom-22 right-4 z-50 flex w-[calc(100vw-2rem)] flex-col rounded-2xl border border-blue-500/20 bg-[#0a0f1c] shadow-2xl sm:right-6 sm:w-96">
+        <div
+          className="fixed bottom-22 right-4 z-50 flex w-[calc(100vw-2rem)] flex-col rounded-2xl shadow-2xl sm:right-6 sm:w-96"
+          style={{
+            background: "var(--bg-elevated)",
+            border: "1px solid var(--border-strong)",
+          }}
+        >
           {/* Header */}
-          <div className="flex items-center justify-between border-b border-blue-500/15 px-4 py-3">
+          <div
+            className="flex items-center gap-3 rounded-t-2xl px-4 py-3"
+            style={{ borderBottom: "1px solid var(--border)" }}
+          >
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-500/15 ring-1 ring-blue-500/25 text-blue-400">
+              <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zM9 9h2v2H9V9z" clipRule="evenodd" />
+              </svg>
+            </div>
             <div>
-              <p className="text-sm font-semibold text-slate-100">Email Assistant</p>
-              <p className="text-xs text-slate-500">Search and ask about your inbox</p>
+              <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+                Email Assistant
+              </p>
+              <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                Ask anything about your inbox
+              </p>
             </div>
           </div>
 
           {/* Messages */}
           <div className="flex h-80 flex-col gap-3 overflow-y-auto p-4">
-            {messages.length === 0 && (
-              <div className="flex flex-1 flex-col items-center justify-center gap-2 text-center">
-                <p className="text-sm text-slate-400">
-                  Ask me anything about your emails or tasks.
-                </p>
-                <p className="text-xs text-slate-600">
-                  e.g. "Do I have any upcoming deadlines?" or "Show me recent security emails"
-                </p>
-              </div>
-            )}
+            {/* Welcome bubble — always shown, not sent to API */}
+            <AssistantBubble content={WELCOME_MESSAGE} />
+
             {messages.map((m, i) => (
               <div
                 key={i}
                 className={cn(
-                  "max-w-[85%] rounded-xl px-3 py-2 text-sm leading-relaxed",
+                  "max-w-[85%] whitespace-pre-wrap rounded-xl px-3 py-2 text-sm leading-relaxed",
                   m.role === "user"
                     ? "ml-auto bg-blue-600 text-white"
-                    : "bg-[#141f35] text-slate-200",
+                    : "",
                 )}
+                style={
+                  m.role === "assistant"
+                    ? { background: "var(--bg-card-hover)", color: "var(--text-secondary)" }
+                    : {}
+                }
               >
                 {m.content}
               </div>
             ))}
+
             {loading && (
-              <div className="flex max-w-[85%] items-center gap-1.5 rounded-xl bg-[#141f35] px-3 py-3">
+              <div
+                className="flex max-w-[85%] items-center gap-1.5 rounded-xl px-3 py-3"
+                style={{ background: "var(--bg-card-hover)" }}
+              >
                 {[0, 1, 2].map((i) => (
                   <span
                     key={i}
-                    className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-400"
-                    style={{ animationDelay: `${i * 150}ms` }}
+                    className="h-1.5 w-1.5 animate-bounce rounded-full"
+                    style={{ background: "var(--text-muted)", animationDelay: `${i * 150}ms` }}
                   />
                 ))}
               </div>
@@ -129,7 +152,7 @@ export function ChatBot() {
           </div>
 
           {/* Input */}
-          <div className="border-t border-blue-500/15 p-3">
+          <div className="p-3" style={{ borderTop: "1px solid var(--border)" }}>
             <div className="flex items-end gap-2">
               <textarea
                 value={input}
@@ -137,7 +160,7 @@ export function ChatBot() {
                 onKeyDown={handleKey}
                 placeholder="Ask about your emails…"
                 rows={1}
-                className="flex-1 resize-none rounded-lg border border-blue-500/20 bg-[#0f1729] px-3 py-2 text-sm text-slate-200 placeholder:text-slate-600 focus:border-blue-500/50 focus:outline-none"
+                className="input-dark flex-1 resize-none rounded-lg px-3 py-2 text-sm focus:outline-none"
                 style={{ maxHeight: "6rem", overflowY: "auto" }}
               />
               <button
@@ -155,5 +178,16 @@ export function ChatBot() {
         </div>
       )}
     </>
+  );
+}
+
+function AssistantBubble({ content }: { content: string }) {
+  return (
+    <div
+      className="max-w-[85%] whitespace-pre-wrap rounded-xl px-3 py-2 text-sm leading-relaxed"
+      style={{ background: "var(--bg-card-hover)", color: "var(--text-secondary)" }}
+    >
+      {content}
+    </div>
   );
 }
