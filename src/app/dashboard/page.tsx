@@ -38,7 +38,7 @@ export default async function DashboardPage() {
           </p>
         </div>
         <GettingStartedGuide hasUserKey={hasUserKey} />
-        <EmailList />
+        <EmailList hasUserKey={hasUserKey} />
       </main>
       <ChatBot />
     </div>
