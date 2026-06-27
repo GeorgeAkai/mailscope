@@ -199,8 +199,12 @@ export default function HomePage() {
         </section>
       </main>
 
-      <footer className="border-t py-6 text-center text-xs" style={{ borderColor: "var(--border)", color: "var(--text-muted)" }}>
-        MailScope · Read-only Gmail triage · Built with Next.js & AI
+      <footer className="border-t py-6 text-center text-xs space-x-3" style={{ borderColor: "var(--border)", color: "var(--text-muted)" }}>
+        <span>MailScope · Read-only Gmail triage</span>
+        <span>·</span>
+        <Link href="/privacy" className="hover:text-blue-400 transition">Privacy Policy</Link>
+        <span>·</span>
+        <Link href="/terms" className="hover:text-blue-400 transition">Terms of Service</Link>
       </footer>
     </div>
   );

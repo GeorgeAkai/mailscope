@@ -176,18 +176,18 @@ export function EmailList({ hasUserKey = true }: { hasUserKey?: boolean }) {
             type="button"
             onClick={handleSync}
             disabled={syncing}
-            title={hasUserKey ? undefined : "No AI key — emails will be classified using keyword rules"}
+            title={hasUserKey ? undefined : "No AI — runs keyword & pattern rules instead of a language model"}
             className="btn-primary flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm"
           >
             {syncing ? (
               <>
                 <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-                {hasUserKey ? "Syncing…" : "Triaging…"}
+                Analyzing…
               </>
             ) : hasUserKey ? (
-              <><SyncIcon />Sync now</>
+              <><SyncIcon />Run AI Analysis</>
             ) : (
-              <><TriageIcon />Manual Triage</>
+              <><TriageIcon />Run Manual Analysis</>
             )}
           </button>
         </div>
@@ -232,7 +232,7 @@ export function EmailList({ hasUserKey = true }: { hasUserKey?: boolean }) {
           <p className="mt-1 max-w-xs text-sm" style={{ color: "var(--text-muted)" }}>
             {dayFilter !== "0"
               ? "No emails in this time range. Try a wider window."
-              : `Click "Sync now" to fetch and triage your Gmail inbox.`}
+              : `Click "Run AI Analysis" (or "Run Manual Analysis") to fetch and triage your inbox.`}
           </p>
         </div>
       ) : (
